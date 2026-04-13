@@ -36,7 +36,7 @@ const bombKeyboard = {
 function isVerified(userId) {
     if (userId.toString() === config.ADMIN_ID) return true;
     const verified = userVerifications.get(userId);
-    return verified && verified.channel && verified.group && verified.youtube;
+    return verified && verified.verified === true;
 }
 
 bot.onText(/\/start/, (msg) => {
@@ -48,7 +48,7 @@ bot.onText(/\/start/, (msg) => {
     userSessions.delete(chatId);
     
     if (userId.toString() === config.ADMIN_ID) {
-        bot.sendMessage(chatId, `👑 *Welcome Admin ${firstName}!*\n\n🔥 You have direct access to all features.\n💣 Use /bomb to start.`, { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, `👑 *Welcome Admin ${firstName}!*\n\n🔥 You have direct access.\n💣 Use /bomb to start.`, { parse_mode: 'Markdown' });
         return;
     }
     
@@ -62,54 +62,24 @@ bot.on('callback_query', async (query) => {
     const data = query.data;
     const currentYear = config.getCurrentYear();
     
-    if (userId.toString() === config.ADMIN_ID) {
-        if (data === "start_bomb") {
-            userSessions.set(chatId, { step: 'number' });
-            bot.sendMessage(chatId, "*💣 TARGET NUMBER*\n\n📋 Enter 11 digit number:\n\n⚡ Example: `013XXXXXXXX`", { parse_mode: 'Markdown', ...bombKeyboard });
-        }
-        return;
-    }
-    
     if (data === "verify") {
-        const checkingMsg = await bot.sendMessage(chatId, "🔍 *Checking verification status...*", { parse_mode: 'Markdown' });
+        userVerifications.set(userId, {
+            channel: true,
+            group: true,
+            youtube: true,
+            verified: true,
+            verifiedAt: Date.now()
+        });
         
-        let isChannelMember = false;
-        let isGroupMember = false;
-        
-        try {
-            const chatMemberChannel = await bot.getChatMember(config.TELEGRAM_CHANNEL.replace('https://t.me/', '@'), userId);
-            isChannelMember = ['member', 'administrator', 'creator'].includes(chatMemberChannel.status);
-        } catch (error) {}
-        
-        try {
-            const chatMemberGroup = await bot.getChatMember(config.TELEGRAM_GROUP.replace('https://t.me/', '@'), userId);
-            isGroupMember = ['member', 'administrator', 'creator'].includes(chatMemberGroup.status);
-        } catch (error) {}
-        
-        const isYoutubeSubscribed = true;
-        
-        if (isChannelMember && isGroupMember && isYoutubeSubscribed) {
-            userVerifications.set(userId, {
-                channel: true, group: true, youtube: true, verified: true, verifiedAt: Date.now()
-            });
-            
-            await bot.editMessageText(`*✅ VERIFICATION SUCCESSFUL! ✅*\n\n${getVerifiedMenu(currentYear)}`, 
-                { chat_id: chatId, message_id: checkingMsg.message_id, parse_mode: 'Markdown', ...mainMenuKeyboard });
-        } else {
-            let failMessage = "*❌ VERIFICATION FAILED!* ❌\n\n*Please complete all requirements:*\n\n";
-            if (!isChannelMember) failMessage += "❌ *Join Telegram Channel*\n";
-            if (!isGroupMember) failMessage += "❌ *Join Telegram Group*\n";
-            if (!isYoutubeSubscribed) failMessage += "❌ *Subscribe on YouTube*\n";
-            failMessage += "\n*After joining, click VERIFY again!*";
-            
-            await bot.editMessageText(failMessage, 
-                { chat_id: chatId, message_id: checkingMsg.message_id, parse_mode: 'Markdown', ...welcomeKeyboard });
-        }
+        await bot.editMessageText(
+            `*✅ VERIFICATION SUCCESSFUL! ✅*\n\n${getVerifiedMenu(currentYear)}`,
+            { chat_id: chatId, message_id: query.message.message_id, parse_mode: 'Markdown', ...mainMenuKeyboard }
+        );
     }
     
     else if (data === "start_bomb") {
         if (!isVerified(userId)) {
-            bot.sendMessage(chatId, "*❌ You are not verified!*\n\nPlease complete verification first using /start", { parse_mode: 'Markdown' });
+            bot.sendMessage(chatId, "*❌ You are not verified!*\n\nPlease click VERIFY button first.", { parse_mode: 'Markdown' });
             return;
         }
         userSessions.set(chatId, { step: 'number' });
@@ -119,7 +89,9 @@ bot.on('callback_query', async (query) => {
     else if (data === "my_stats") {
         const stats = userStats.get(userId) || { total: 0, success: 0, failed: 0 };
         const rate = stats.total > 0 ? (stats.success / stats.total) * 100 : 0;
-        bot.sendMessage(chatId, `*📈 YOUR STATISTICS*\n\n🔥 *Total Bombs:* \`${stats.total}\`\n✅ *Success:* \`${stats.success}\`\n❌ *Failed:* \`${stats.failed}\`\n📊 *Success Rate:* \`${rate.toFixed(1)}%\``, { parse_mode: 'Markdown', ...mainMenuKeyboard });
+        bot.sendMessage(chatId, 
+            `*📈 YOUR STATISTICS*\n\n🔥 *Total Bombs:* \`${stats.total}\`\n✅ *Success:* \`${stats.success}\`\n❌ *Failed:* \`${stats.failed}\`\n📊 *Success Rate:* \`${rate.toFixed(1)}%\``,
+            { parse_mode: 'Markdown', ...mainMenuKeyboard });
     }
     
     else if (data === "about") {
@@ -130,11 +102,14 @@ bot.on('callback_query', async (query) => {
         const start = Date.now();
         const msg = await bot.sendMessage(chatId, "🏓 *Pinging...*", { parse_mode: 'Markdown' });
         const latency = Date.now() - start;
-        bot.editMessageText(`🏓 *PONG!*\n\n📡 Response Time: \`${latency}ms\`\n✅ Status: ONLINE`, { chat_id: chatId, message_id: msg.message_id, parse_mode: 'Markdown', ...mainMenuKeyboard });
+        bot.editMessageText(`🏓 *PONG!*\n\n📡 Response Time: \`${latency}ms\`\n✅ Status: ONLINE`, 
+            { chat_id: chatId, message_id: msg.message_id, parse_mode: 'Markdown', ...mainMenuKeyboard });
     }
     
     else if (data === "help") {
-        bot.sendMessage(chatId, `*🆘 HELP & SUPPORT*\n\n📞 *WhatsApp:* ${config.WHATSAPP}\n✈️ *Telegram:* ${config.TELEGRAM}\n🐙 *GitHub:* ${config.GITHUB}\n📧 *Email:* ${config.EMAIL}\n\n*⚡ How to use:*\n1️⃣ Send /bomb\n2️⃣ Enter target number (11 digits)\n3️⃣ Enter SMS count (1-50)\n4️⃣ Wait for results`, { parse_mode: 'Markdown', ...mainMenuKeyboard });
+        bot.sendMessage(chatId,
+            `*🆘 HELP & SUPPORT*\n\n📞 *WhatsApp:* ${config.WHATSAPP}\n✈️ *Telegram:* ${config.TELEGRAM}\n🐙 *GitHub:* ${config.GITHUB}\n📧 *Email:* ${config.EMAIL}\n\n*⚡ How to use:*\n1️⃣ Click VERIFY\n2️⃣ Click START BOMB\n3️⃣ Enter 11 digit number\n4️⃣ Enter SMS count (1-50)`,
+            { parse_mode: 'Markdown', ...mainMenuKeyboard });
     }
     
     else if (data === "status") {
@@ -143,7 +118,7 @@ bot.on('callback_query', async (query) => {
     
     else if (data === "cancel_bomb") {
         userSessions.delete(chatId);
-        bot.sendMessage(chatId, "*❌ Bombing cancelled!*\n\nUse /start to return to main menu", { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, "*❌ Bombing cancelled!*", { parse_mode: 'Markdown' });
     }
 });
 
@@ -174,9 +149,9 @@ bot.on('message', async (msg) => {
             if (count >= 1 && count <= 50) {
                 userSessions.delete(chatId);
                 await handleBombing(bot, chatId, userId, session.number, count);
-                bot.sendMessage(chatId, "*💫 Want to bomb again?*\n\nClick START BOMB button below!", { parse_mode: 'Markdown', ...mainMenuKeyboard });
+                bot.sendMessage(chatId, "*💫 Want to bomb again?*\n\nClick START BOMB button!", { parse_mode: 'Markdown', ...mainMenuKeyboard });
             } else {
-                bot.sendMessage(chatId, "*❌ Invalid count!* Please enter a number between 1-50.", { parse_mode: 'Markdown' });
+                bot.sendMessage(chatId, "*❌ Invalid count!* Please enter 1-50.", { parse_mode: 'Markdown' });
             }
         }
     }
@@ -187,7 +162,7 @@ bot.onText(/\/bomb/, (msg) => {
     const userId = msg.from.id;
     
     if (!isVerified(userId)) {
-        bot.sendMessage(chatId, "*❌ You are not verified!*\n\nPlease complete verification first using /start", { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, "*❌ You are not verified!*\n\nPlease click VERIFY button first.", { parse_mode: 'Markdown' });
         return;
     }
     
@@ -216,13 +191,13 @@ bot.onText(/\/ping/, async (msg) => {
 });
 
 bot.onText(/\/help/, (msg) => {
-    bot.sendMessage(msg.chat.id, `*🆘 HELP & SUPPORT*\n\n📞 *WhatsApp:* ${config.WHATSAPP}\n✈️ *Telegram:* ${config.TELEGRAM}\n🐙 *GitHub:* ${config.GITHUB}\n📧 *Email:* ${config.EMAIL}\n\n*⚡ How to use:*\n1️⃣ Send /bomb\n2️⃣ Enter target number (11 digits)\n3️⃣ Enter SMS count (1-50)\n4️⃣ Wait for results`, { parse_mode: 'Markdown', ...mainMenuKeyboard });
+    bot.sendMessage(msg.chat.id, `*🆘 HELP & SUPPORT*\n\n📞 *WhatsApp:* ${config.WHATSAPP}\n✈️ *Telegram:* ${config.TELEGRAM}\n🐙 *GitHub:* ${config.GITHUB}\n📧 *Email:* ${config.EMAIL}\n\n*⚡ How to use:*\n1️⃣ Click VERIFY\n2️⃣ Click START BOMB\n3️⃣ Enter 11 digit number\n4️⃣ Enter SMS count (1-50)`, { parse_mode: 'Markdown', ...mainMenuKeyboard });
 });
 
 bot.onText(/\/status/, (msg) => {
     bot.sendMessage(msg.chat.id, getStatusText(config.getCurrentYear(), config.getCurrentDateTime(), APIS.length), { parse_mode: 'Markdown', ...mainMenuKeyboard });
 });
 
-console.log('🤖 Bot is running on Railway...');
+console.log('🤖 Bot is running...');
 
 module.exports = bot;
